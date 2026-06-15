@@ -12,6 +12,19 @@ from utils.run_dir import resolve_checkpoint
 import config
 
 
+@torch.no_grad()
+def generate_images(diffusion, model, batch_size, image_size, channels, labels):
+    device = diffusion.beta.device
+    x = torch.randn(batch_size, channels, image_size, image_size, device=device)
+    for t in reversed(range(diffusion.T)):
+        t_batch = torch.full((batch_size,), t, device=device, dtype=torch.long)
+        pred_noise_cond = model(x, t_batch, labels)
+        pred_noise_uncond = model(x, t_batch, None)
+        pred_noise = pred_noise_uncond + config.sample_w * (pred_noise_cond - pred_noise_uncond)
+        x = diffusion.p_sample(x, t, pred_noise)
+    return x.clamp(-1.0, 1.0)
+
+
 def load_model(ckpt_path, device):
     model = UNet(
         in_channels=config.in_channels,
@@ -40,7 +53,6 @@ def upscale_for_export(images, scale):
 
 def sample(num_images=16, run_name=None, ckpt=None, output_path=None, scale=None, padding=None, labels=None):
     device = config.device
-    dropout = config.dropout
     ckpt_path, run_dir = resolve_checkpoint(run_name=run_name, ckpt=ckpt)
 
     if output_path is None:
@@ -63,22 +75,28 @@ def sample(num_images=16, run_name=None, ckpt=None, output_path=None, scale=None
         f'Loaded epoch={ckpt_meta.get("epoch", "?")}, '
         f'loss={ckpt_meta.get("loss", "?")}'
     )
-    print(f'Generating {num_images} images...')
+    print(f'Generating {num_images} images with CFG weight={config.sample_w}...')
 
+    if labels is not None and len(labels) != num_images:
+        raise ValueError(
+            f'labels count ({len(labels)}) must match num_images ({num_images})'
+        )
     if labels is None:
         labels = torch.randint(0, 10, (num_images,), device=device)
-    images = diffusion.sample(
-        model,
+    print(f'Labels: {labels.tolist()}')
+
+    images = generate_images(
+        diffusion=diffusion,
+        model=model,
         batch_size=num_images,
         image_size=config.image_size,
         channels=config.in_channels,
-        labels=labels
+        labels=labels,
     )
-    images = (images + 1) / 2  # [-1,1] -> [0,1]
 
     scale = config.sample_scale if scale is None else scale
     padding = config.sample_padding if padding is None else padding
-    export_images = upscale_for_export(images, scale)
+    export_images = upscale_for_export((images + 1) / 2, scale)
     nrow = max(1, int(math.sqrt(num_images)))
 
     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
@@ -117,5 +135,5 @@ if __name__ == '__main__':
         output_path=args.output,
         scale=args.scale,
         padding=args.padding,
-        labels=torch.tensor(args.labels, device=config.device) if args.labels is not None else None
+        labels=torch.tensor(args.labels, device=config.device, dtype=torch.long) if args.labels is not None else None
     )

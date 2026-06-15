@@ -147,6 +147,7 @@ def train(init_checkpoint=None):
         pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{config.epochs}')
         for step, (images, labels) in enumerate(pbar):
             images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
             t = torch.randint(0, config.T, (images.size(0),), device=device)
             noisy_images, noise = diffusion.q_sample(images, t, torch.randn_like(images))
             pred_noise = model(noisy_images, t, labels)

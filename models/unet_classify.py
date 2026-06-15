@@ -58,16 +58,19 @@ class LabelsEmbedding(nn.Module):
         self.null_emb = nn.Parameter(torch.zeros(1, emb_size))
         self.embedding = nn.Embedding(class_labels, emb_size)
 
-    def forward(self, labels, dropout=0.0):
-        if not self.training or dropout == 0.0:
-            return self.embedding(labels)
-        B = labels.shape[0]
-        device = labels.device
-        r = torch.rand(B, device=device) < dropout
-        emb = self.embedding(labels)
-        null_emb = self.null_emb.expand(B, -1)
-        out = torch.where(r.unsqueeze(1), null_emb, emb)
-        return out
+    def forward(self, labels=None, dropout=0.0, batch_size=None):
+        if labels is not None:
+            if not self.training or dropout == 0.0:
+                return self.embedding(labels)
+            B = labels.shape[0]
+            device = labels.device
+            r = torch.rand(B, device=device) < dropout
+            emb = self.embedding(labels)
+            null_emb = self.null_emb.expand(B, -1)
+            return torch.where(r.unsqueeze(1), null_emb, emb)
+        if batch_size is None:
+            raise ValueError('batch_size is required when labels is None')
+        return self.null_emb.expand(batch_size, -1)
     
 
 class CrossAttention(nn.Module):
@@ -155,7 +158,11 @@ class UNet(nn.Module):
 
     def forward(self, x, t, labels=None):
         time_emb = self.time_mlp(t)
-        labels_emb = self.labels_embedding(labels, self.dropout) if labels is not None else None
+        labels_emb = self.labels_embedding(
+            labels,
+            dropout=self.dropout,
+            batch_size=x.size(0),
+        )
         skipList = []
         x = self.intro(x, time_emb, labels_emb)
         for i in range(len(self.downs)):

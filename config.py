@@ -34,3 +34,5 @@ sample_run = 'latest'   # latest 或某次训练目录名，如 2026-06-12_18094
 sample_ckpt = 'best'    # best、last，或 epoch 编号如 30
 sample_scale = 8        # 导出时放大倍数，32x32 -> 256x256
 sample_padding = 4      # 拼图间距（像素）
+
+sample_w = 4
