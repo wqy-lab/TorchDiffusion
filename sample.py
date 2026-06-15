@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from torchvision.utils import save_image
 
 from models.diffusion import Diffusion
-from models.unet_time import UNet
+from models.unet_classify import UNet
 from utils.run_dir import resolve_checkpoint
 import config
 
@@ -19,7 +19,11 @@ def load_model(ckpt_path, device):
         base_channels=config.base_channels,
         channel_mults=config.channel_mults,
         num_groups=config.num_groups,
+        num_heads=config.num_heads,
         time_dim=config.time_dim,
+        emb_size=config.emb_size,
+        num_classes=10,
+        dropout=0.0
     ).to(device)
     ckpt = torch.load(ckpt_path, map_location=device)
     state_dict = ckpt['model'] if isinstance(ckpt, dict) and 'model' in ckpt else ckpt
@@ -34,8 +38,9 @@ def upscale_for_export(images, scale):
     return F.interpolate(images, scale_factor=scale, mode='nearest')
 
 
-def sample(num_images=16, run_name=None, ckpt=None, output_path=None, scale=None, padding=None):
+def sample(num_images=16, run_name=None, ckpt=None, output_path=None, scale=None, padding=None, labels=None):
     device = config.device
+    dropout = config.dropout
     ckpt_path, run_dir = resolve_checkpoint(run_name=run_name, ckpt=ckpt)
 
     if output_path is None:
@@ -60,13 +65,15 @@ def sample(num_images=16, run_name=None, ckpt=None, output_path=None, scale=None
     )
     print(f'Generating {num_images} images...')
 
+    if labels is None:
+        labels = torch.randint(0, 10, (num_images,), device=device)
     images = diffusion.sample(
         model,
         batch_size=num_images,
         image_size=config.image_size,
         channels=config.in_channels,
+        labels=labels
     )
-
     images = (images + 1) / 2  # [-1,1] -> [0,1]
 
     scale = config.sample_scale if scale is None else scale
@@ -101,6 +108,7 @@ if __name__ == '__main__':
     parser.add_argument('-o', '--output', type=str, default=None, help='output image path')
     parser.add_argument('-s', '--scale', type=int, default=None, help='export upscale factor')
     parser.add_argument('--padding', type=int, default=None, help='padding between images in grid')
+    parser.add_argument('-l', '--labels', type=int, nargs='+', default=None, help='class labels for generated images, e.g. -l 0 1 2 3')
     args = parser.parse_args()
     sample(
         num_images=args.num_images,
@@ -109,4 +117,5 @@ if __name__ == '__main__':
         output_path=args.output,
         scale=args.scale,
         padding=args.padding,
+        labels=torch.tensor(args.labels, device=config.device) if args.labels is not None else None
     )

@@ -13,7 +13,10 @@ early_stopping_min_delta = 1e-5
 base_channels = 64
 channel_mults = [1, 2, 4, 8]
 time_dim = 256
+emb_size = 32
+num_heads = 8
 num_groups = 8
+dropout = 0.2
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 DATASET_PRESETS = {

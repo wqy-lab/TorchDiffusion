@@ -33,12 +33,12 @@ class Diffusion(object):
         return mean + torch.sqrt(variance) * torch.randn_like(xt)
 
     @torch.no_grad()
-    def sample(self, model, batch_size, image_size, channels):
+    def sample(self, model, batch_size, image_size, channels, labels):
         device = self.beta.device
         x = torch.randn(batch_size, channels, image_size, image_size, device=device)
         for t in reversed(range(self.T)):
             t_batch = torch.full((batch_size,), t, device=device, dtype=torch.long)
-            pred_noise = model(x, t_batch)
+            pred_noise = model(x, t_batch, labels)
             x = self.p_sample(x, t, pred_noise)
         return x.clamp(0.0, 1.0)
 

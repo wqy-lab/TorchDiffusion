@@ -7,7 +7,7 @@ from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from models.unet_time import UNet
+from models.unet_classify import UNet
 from models.diffusion import Diffusion
 from utils.run_dir import (
     create_run_dir,
@@ -121,7 +121,11 @@ def train(init_checkpoint=None):
         base_channels=config.base_channels,
         channel_mults=config.channel_mults,
         num_groups=config.num_groups,
+        num_heads=config.num_heads,
         time_dim=config.time_dim,
+        emb_size=config.emb_size,
+        num_classes=10,
+        dropout=config.dropout
     ).to(device)
     load_init_weights(model, init_checkpoint, device)
 
@@ -141,11 +145,11 @@ def train(init_checkpoint=None):
         model.train()
         epoch_loss = 0.0
         pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{config.epochs}')
-        for step, (images, _) in enumerate(pbar):
+        for step, (images, labels) in enumerate(pbar):
             images = images.to(device, non_blocking=True)
             t = torch.randint(0, config.T, (images.size(0),), device=device)
             noisy_images, noise = diffusion.q_sample(images, t, torch.randn_like(images))
-            pred_noise = model(noisy_images, t)
+            pred_noise = model(noisy_images, t, labels)
             loss = nn.MSELoss()(pred_noise, noise)
 
             optimizer.zero_grad()
